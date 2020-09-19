@@ -13,15 +13,19 @@ import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.ServerPlayerEntity;
 import net.minecraft.nbt.CompoundNBT;
 import net.minecraft.nbt.CompressedStreamTools;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.util.Util;
 import net.minecraft.util.text.StringTextComponent;
 import net.minecraft.util.text.TextFormatting;
-import net.minecraft.world.dimension.DimensionType;
 import net.minecraft.world.server.ServerWorld;
+import net.minecraft.world.storage.FolderName;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.server.FMLServerStartingEvent;
+import net.minecraftforge.fml.server.ServerLifecycleHooks;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -34,9 +38,11 @@ import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+@SuppressWarnings("WeakerAccess")
 @Mod("deathbackup")
 public class DeathBackup {
   public static final Logger LOG = LogManager.getLogger();
@@ -49,6 +55,7 @@ public class DeathBackup {
 
   public DeathBackup() {
     MinecraftForge.EVENT_BUS.addListener(DeathBackup::onServerStarting);
+    MinecraftForge.EVENT_BUS.addListener(DeathBackup::onCommandRegister);
   }
 
   public static void ensureFirst() {
@@ -68,7 +75,8 @@ public class DeathBackup {
       String timestamp = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss").format(new Date());
       String identifier = playerName + "." + hex + "." + timestamp;
       String fileName = identifier + ".nbt";
-      File dir = new File(old.server.getWorld(DimensionType.OVERWORLD).getSaveHandler().getWorldDirectory(), "death-backups");
+      MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+      File dir = new File(server.func_240776_a_(FolderName.PLAYERDATA).toFile(), "death-backups");
       if (!dir.exists()) {
         if (!dir.mkdir()) {
           LOG.error("Unable to create death-backups folder.");
@@ -92,7 +100,10 @@ public class DeathBackup {
 
   public static void onServerStarting(FMLServerStartingEvent event) {
     ensureFirst();
-    RESTORE_COMMAND = new CommandRestore(event.getCommandDispatcher());
+  }
+
+  public static void onCommandRegister(RegisterCommandsEvent event) {
+    RESTORE_COMMAND = new CommandRestore(event.getDispatcher());
     RESTORE_COMMAND.register();
   }
 
@@ -166,13 +177,13 @@ public class DeathBackup {
         }
         CompoundNBT current = player.writeWithoutTypeId(new CompoundNBT());
         for (String key : incoming.keySet()) {
-          current.put(key, incoming.get(key));
+          current.put(key, Objects.requireNonNull(incoming.get(key)));
         }
         player.read(current);
         sender.sendFeedback(new StringTextComponent("Restored " + player.getScoreboardName() + " to back-up: " + filename), false);
         try {
           if (!sender.asPlayer().equals(player)) {
-            player.sendMessage(new StringTextComponent(sender.getName() + " restored your inventory from back-up " + TextFormatting.BOLD + filename + TextFormatting.RESET + "."));
+            player.sendMessage(new StringTextComponent(sender.getName() + " restored your inventory from back-up " + TextFormatting.BOLD + filename + TextFormatting.RESET + "."), Util.DUMMY_UUID);
           }
         } catch (CommandSyntaxException ignored) {
         }
@@ -181,7 +192,7 @@ public class DeathBackup {
     }
 
     public List<FileName> getFilenamesFor(CommandSource source, ServerPlayerEntity player) {
-      File backupDir = new File(player.getServer().getWorld(DimensionType.OVERWORLD).getSaveHandler().getWorldDirectory(), "death-backups");
+      File backupDir = new File(player.getServer().func_240776_a_(FolderName.PLAYERDATA).toFile(), "death-backups");
       if (!backupDir.exists()) {
         // TODO: Error here to say no backup directory
         throw new CommandException(new StringTextComponent("Unable to locate" + TextFormatting.BOLD + "death-backups" + TextFormatting.RESET + " folder"));
@@ -201,6 +212,7 @@ public class DeathBackup {
     }
   }
 
+  @SuppressWarnings("WeakerAccess")
   public static class FileName {
     private long value;
     private File file;
