@@ -20,6 +20,6 @@ Server-side mod to keep inventory backups when players die. These can be restore
 [[dependencies.DeathBackup]]
     modId="minecraft"
     mandatory=true
-    versionRange="[1.16.3]"
+    versionRange="[1.16.3,)"
     ordering="NONE"
     side="BOTH"
